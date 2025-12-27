@@ -43,7 +43,7 @@ sudo pacman -S python python-gobject python-cairo gtk3 webkit2gtk-4.1
 sudo slackpkg update
 sudo slackpkg install python3 pygobject3 pycairo gtk+3 webkit2gtk
 ```
-
+### Dicionário
 | **Componente** | **Debian/Ubuntu** | **Fedora** | **Arch Linux**
 | :---: | :---: | :---: | :---:
 | **Linguagem** | python3 | python3 | python
@@ -68,9 +68,9 @@ chmod +x install.sh
 Diferente de aplicações baseadas em Electron (que embutem um navegador Chromium inteiro para cada app, consumindo muita RAM), este projeto utiliza as bibliotecas nativas do seu sistema Linux.
 
 A arquitetura funciona em três camadas:
-    1. Backend (Lógica): O Python 3 gerencia a criação da janela e o isolamento dos dados.
-    2. Ponte (Bindings): O PyGObject (GObject Introspection) conecta o código Python diretamente às bibliotecas C/C++ do sistema GNOME.
-    3. Engine (Renderização): O WebKit2 (mesmo motor do Safari) renderiza o WhatsApp Web.
+1. Backend (Lógica): O Python 3 gerencia a criação da janela e o isolamento dos dados.
+2. Ponte (Bindings): O PyGObject (GObject Introspection) conecta o código Python diretamente às bibliotecas C/C++ do sistema GNOME.
+3. Engine (Renderização): O WebKit2 (mesmo motor do Safari) renderiza o WhatsApp Web.
 
 O Diferencial: Sandbox de Dados O script força o WebKit a criar um contexto de dados ("perfil") exclusivo dentro da pasta wtp_data na raiz do projeto. Isso garante que:
     - Seus cookies do WhatsApp não se misturam com seu navegador principal.
