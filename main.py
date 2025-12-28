@@ -58,6 +58,9 @@ class ClientWindow(Gtk.Window):
 
             self.webview = WebKit2.WebView.new_with_context(context)
 
+            self.webview.connect("decide-policy", self._on_decide_policy)
+            self.webview.connect("create", self._on_create_web_view)
+
             # Aplica o User Agent "falso" para passar pelo filtro do WhatsApp.
             settings = self.webview.get_settings()
             settings.set_user_agent(USER_AGENT)
@@ -71,6 +74,36 @@ class ClientWindow(Gtk.Window):
             # Captura falhas na engine do navegador.
             logging.critical(f"Erro fatal ao iniciar WebKit: {error}", exc_info=True)
             raise error
+
+    def _on_decide_policy(self, webview, decision, decision_type):
+        if decision_type == WebKit2.PolicyDecisionType.NAVIGATION_ACTION:
+            navigation_action = decision.get_navigation_action()
+            request = navigation_action.get_request()
+            uri = request.get_uri()
+            
+            if uri and not uri.startswith("https://web.whatsapp.com"):
+                try:
+                    Gtk.show_uri_on_window(self, uri, Gtk.get_current_event_time())
+                    decision.ignore()
+                    logging.info(f"Link externo aberto no navegador: {uri}")
+                    return True
+                except Exception as error:
+                    logging.warning(f"Falha ao abrir link externo: {error}")
+        
+        return False
+
+    def _on_create_web_view(self, webview, navigation_action):
+        request = navigation_action.get_request()
+        uri = request.get_uri()
+        
+        if uri:
+            try:
+                Gtk.show_uri_on_window(self, uri, Gtk.get_current_event_time())
+                logging.info(f"Popup/nova janela aberta no navegador: {uri}")
+            except Exception as error:
+                logging.warning(f"Falha ao abrir popup no navegador: {error}")
+        
+        return None
 
 if __name__ == "__main__":
     
