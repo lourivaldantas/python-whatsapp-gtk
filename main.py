@@ -17,7 +17,7 @@ import logging
 # Garante que as versões corretas das bibliotecas do sistema operacional sejam carregadas.
 gi.require_version("Gtk", "3.0")
 gi.require_version("WebKit2", "4.1")
-from gi.repository import Gtk, WebKit2
+from gi.repository import Gtk, WebKit2, GLib
 
 # User Agent do Chrome estável no Linux.
 # Necessário para evitar que o WhatsApp web bloqueie o navegador por ser "desconhecido" ou antigo.
@@ -73,6 +73,9 @@ class ClientWindow(Gtk.Window):
             raise error
 
 if __name__ == "__main__":
+    
+    GLib.set_prgname("whatsapp")
+    
     try:
         app = ClientWindow()
         app.connect("destroy", Gtk.main_quit)
