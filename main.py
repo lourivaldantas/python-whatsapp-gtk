@@ -56,9 +56,14 @@ def get_app_data_path():
 class ClientWindow(Gtk.Window):
     def __init__(self):
         super().__init__(title="WhatsApp")
-        self.set_default_size(1000, 700)
-        base_path = get_app_data_path()
-        log_file = os.path.join(base_path, "application.log")
+        
+        self.base_path = get_app_data_path()
+        self.state_file = os.path.join(self.base_path, "window_state.json")
+
+        if not self.load_window_state():
+            self.set_default_size(1000, 700)
+
+        log_file = os.path.join(self.base_path, "application.log")
 
         # Salva logs em arquivos para auditoria.
         logging.basicConfig(
@@ -70,8 +75,8 @@ class ClientWindow(Gtk.Window):
         try:
             # isola cookies e cache na pasta "wtp_data", sem misturar com o navegador do sistema operacional.
             data_manager = WebKit2.WebsiteDataManager(
-                base_data_directory = base_path,
-                base_cache_directory = base_path
+                base_data_directory = self.base_path,
+                base_cache_directory = self.base_path
             )
 
             context = WebKit2.WebContext.new_with_website_data_manager(data_manager)
@@ -81,6 +86,7 @@ class ClientWindow(Gtk.Window):
             self.webview = WebKit2.WebView.new_with_context(context)
 
             # ----- WebView Connect -----
+            self.connect("delete-event", self.save_window_state)
             self.webview.connect("decide-policy", self._on_decide_policy) # Evita que links externos sejam abertos no wrapper.
             self.webview.connect("create", self._on_create_web_view) # Captura tentativas de abrir novas janelas por JavaScript e redireciona para o navegador padrão.
             self.webview.connect("permission-request", self._on_permission_request) # Gerencia as permissões de microfone e câmera.
@@ -102,6 +108,49 @@ class ClientWindow(Gtk.Window):
             # Captura falhas na engine do navegador.
             logging.critical(f"Erro fatal ao iniciar WebKit: {error}", exc_info=True)
             raise error
+
+    def save_window_state(self, widget, event):
+        try:
+            size = self.get_size()
+            position = self.get_position()
+            is_maximized = self.is_maximized()
+
+            state = {
+                "width": size[0],
+                "height": size[1],
+                "x": position[0],
+                "y": position[1],
+                "is_maximized": is_maximized
+            }
+
+            with open(self.state_file, 'w') as f:
+                json.dump(state, f)
+            
+            logging.info("Estado de janela salvo.")
+
+        except Exception as error:
+            logging.warning(f"Erro ao salvar estado: {error}")
+
+        return False
+
+    def load_window_state(self):
+        try:
+            if os.path.exists(self.state_file):
+                with open(self.state_file, 'r') as f:
+                    state = json.load(f)
+
+                self.resize(state.get("width", 1000), state.get("height", 700))
+
+                if state.get("is_maximized", False):
+                    self.maximize()
+                else:
+                    self.move(state.get("x", 0), state.get("y", 0))
+
+                logging.info("Estado de janela restaurado com sucesso.")
+                return True
+        except Exception as error:
+            logging.warning(f"Não foi possível restaurar o estado da janela: {error}")
+        return False
 
     def _on_permission_request(self, webview, request):
         logging.info("Permissão de dispositivo solicitada. Acesso concedido.")
