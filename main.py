@@ -93,7 +93,10 @@ class ClientWindow(Gtk.Window):
 
             context = WebKit2.WebContext.new_with_website_data_manager(data_manager)
 
+            # Otimiza o gerenciamento de RAM para Single SPA.
             context.set_cache_model(WebKit2.CacheModel.DOCUMENT_VIEWER)
+            # Desativa o corretor ortográfico para economizar RAM
+            context.set_spell_checking_enabled(False)
 
             self.webview = WebKit2.WebView.new_with_context(context)
 
@@ -105,6 +108,8 @@ class ClientWindow(Gtk.Window):
 
             # Aplica o User Agent "falso" para passar pelo filtro do WhatsApp.
             settings = self.webview.get_settings()
+
+            settings.set_hardware_acceleration_policy(WebKit2.HardwareAccelerationPolicy.ALWAYS)
 
             settings.set_enable_write_console_messages_to_stdout(False) # Limpa o terminal,
             settings.set_enable_developer_extras(False) # Desativa funções de desenvolvedor, economizando memória.
