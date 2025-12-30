@@ -6,15 +6,15 @@
 ## Sobre o Projeto
 Sempre prezei pelo equilíbrio entre **privacidade, segurança e conforto**. 
 
-Embora achasse interessante a função **PWA** (Progressive Web App) de navegadores populares como Chrome ou Edge, abandonei o uso deles justamente por questões de privacidade e coleta de dados. Além disso, nunca confiei plenamente nos *ports* e *wrappers* de WhatsApp Web de terceiros que encontramos pela internet (muitas vezes de código fechado ou inchados).
+Embora achasse interessante a função **PWA** (Progressive Web App) de navegadores populares como Chrome ou Edge, abandonei o uso deles justamente por questões de privacidade e coleta de dados dos próprios navegadores. Além disso, apesar de saber da excelência de vários *ports* e *wrappers* feitos pela comunidade, resolvi criar minha própria solução:
 
-Para sanar essas questões, resolvi criar minha própria solução em **Python** — linguagem com a qual tenho familiaridade — utilizando o **WebKit2**, que gera um ambiente **sandbox** (isolado) e seguro. 
+Fiz um **wrapper** em **Python** — linguagem com a qual tenho familiaridade — utilizando o **WebKit2**, que gera um ambiente **sandbox** isolado e sem telemetria por parte dos navegadores. 
 
 > *"Recomendo a todos que criem vocês mesmos seus programas desse tipo. Caso não queiram, aí está o meu: transparente e auditável."*
 
 ## Funcionalidades
-- Navegador WebKit nativo.
-- Isolamento de dados (Sandbox) na pasta do projeto.
+- Navegador WebKit.
+- Isolamento de dados.
 - Instalação integrada ao menu do sistema.
 - Suporte a gestos (padrão WebKit).
 
@@ -63,6 +63,15 @@ chmod +x install.sh
 ./install.sh
 ```
 
+## Desinstalação do programa:
+```bash
+# Remove o executável e o atalho
+rm ~/.local/bin/python-whatsapp-gtk
+rm ~/.local/share/applications/python-whatsapp-gtk.desktop
+# Remove os dados de navegação (Login, Cache, Cookies)
+rm ~/.local/share/python-whatsapp-gtk
+```
+
 ## Como funciona
 Diferente de aplicações baseadas em Electron (que embutem um navegador Chromium inteiro para cada app, consumindo muita RAM), este projeto utiliza as bibliotecas nativas do seu sistema Linux.
 
@@ -71,7 +80,7 @@ A arquitetura funciona em três camadas:
 2. Ponte (Bindings): O PyGObject (GObject Introspection) conecta o código Python diretamente às bibliotecas C/C++ do sistema GNOME.
 3. Engine (Renderização): O WebKit2 (mesmo motor do Safari) renderiza o WhatsApp Web.
 
-O Diferencial: Sandbox de Dados O script força o WebKit a criar um contexto de dados ("perfil") exclusivo dentro da pasta wtp_data na raiz do projeto. Isso garante que:
+O Diferencial: Isolamento de Dados: O script força o WebKit a criar um contexto de dados ("perfil") exclusivo dentro da pasta ~/.local/share/python-whatsapp-gtk. Isso garante que:
 - Seus cookies do WhatsApp não se misturam com seu navegador principal.
 - Você tem portabilidade total (basta copiar a pasta para fazer backup da sessão).
 
