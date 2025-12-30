@@ -10,18 +10,38 @@ Licença: GPLv3
 """
 
 import gi
+import json
+import logging
 import os
 import sys
-import logging
+import urllib.request
 
 # Garante que as versões corretas das bibliotecas do sistema operacional sejam carregadas.
 gi.require_version("Gtk", "3.0")
 gi.require_version("WebKit2", "4.1")
 from gi.repository import Gtk, WebKit2, GLib
 
-# User Agent do Chrome estável no Linux.
-# Necessário para evitar que o WhatsApp web bloqueie o navegador por ser "desconhecido" ou antigo.
-USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+def get_latest_user_agent():
+    """
+    Busca o User_Agent mais recente para evitar manutenção manual constante.
+    Usa biblioteca nativa para não aumentar o consumo de RAM.
+    """
+    fallback_ua = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    url = "https://jnrbsn.github.io/user-agents/user-agents.json"
+
+    try:
+        # Timeout curto para não travar a inicialização se estiver sem internet.
+        with urllib.request.urlopen(url, timeout=3) as response:
+            data = json.loads(response.read().decode())
+            if data and len(data) > 0:
+                # Retorna o primeiro da list (geralmente o mais novo/popular)
+                logging.info(f"User-Agent atualizado via nuvem {data[0]}")
+                return data[0]
+    except Exception as error:
+        logging.warning(f"Falha ao buscar User-Agent on-line ({error}).")
+    
+    # Se der erro ou se a lista vier vazia, apenas reotna o fallback.
+    return fallback_ua
 
 class ClientWindow(Gtk.Window):
     def __init__(self):
@@ -56,6 +76,8 @@ class ClientWindow(Gtk.Window):
 
             context = WebKit2.WebContext.new_with_website_data_manager(data_manager)
 
+            context.set_cache_model(WebKit2.CacheModel.DOCUMENT_VIEWER)
+
             self.webview = WebKit2.WebView.new_with_context(context)
 
             self.webview.connect("decide-policy", self._on_decide_policy)
@@ -63,8 +85,12 @@ class ClientWindow(Gtk.Window):
 
             # Aplica o User Agent "falso" para passar pelo filtro do WhatsApp.
             settings = self.webview.get_settings()
-            settings.set_user_agent(USER_AGENT)
-            logging.info(f"User Agent configurado para: {USER_AGENT}")
+
+            settings.set_enable_write_console_messages_to_stdout(False) # Limpa o terminal,
+            settings.set_enable_developer_extras(False) # Desativa funções de desenvolvedor, economizando memória.
+
+            latest_ua = get_latest_user_agent()
+            settings.set_user_agent(latest_ua)
 
             # Carrega a aplicação
             url = "https://web.whatsapp.com/"
@@ -81,7 +107,7 @@ class ClientWindow(Gtk.Window):
             request = navigation_action.get_request()
             uri = request.get_uri()
             
-            if uri and not uri.startswith("https://web.whatsapp.com"):
+            if uri and "whatsapp.com" not in uri and "javascript:" not in uri:
                 try:
                     Gtk.show_uri_on_window(self, uri, Gtk.get_current_event_time())
                     decision.ignore()
