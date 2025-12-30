@@ -9,6 +9,7 @@ Autor: Lourival Dantas
 Licença: GPLv3
 """
 
+import fcntl
 import gi
 import json
 import logging
@@ -59,6 +60,17 @@ class ClientWindow(Gtk.Window):
         
         self.base_path = get_app_data_path()
         self.state_file = os.path.join(self.base_path, "window_state.json")
+
+        # Cria um arquivo de trava. Se já estiver trancado por outro, fecha este.
+        self.lock_file_path = os.path.join(self.base_path, "app.lock")
+        
+        try:
+            self.lock_fp = open(self.lock_file_path, 'w')
+            # Tenta adquirir bloqueio exclusivo (LOCK_EX) e sem esperar (LOCK_NB).
+            fcntl.lockf(self.lock_fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except IOError:
+            logging.warning("Outra instância já está rodando. Encerrando")
+            sys.exit(0)
 
         if not self.load_window_state():
             self.set_default_size(1000, 700)
