@@ -40,25 +40,25 @@ def get_latest_user_agent():
     except Exception as error:
         logging.warning(f"Falha ao buscar User-Agent on-line ({error}).")
     
-    # Se der erro ou se a lista vier vazia, apenas reotna o fallback.
+    # Se der erro ou se a lista vier vazia, apenas retorna o fallback.
     return fallback_ua
+
+def get_app_data_path():
+    # Retorna o diretório padrão do usuário (XDG Standard)
+    path = os.path.join(GLib.get_user_data_dir(), "python-whatsapp-gtk")
+    try:
+        os.makedirs(path, exist_ok=True)
+        return path
+    except OSError as error:
+        sys.stderr.write(f"CRITICAL: Falha ao criar repositório de dados: {error}\n")
+        sys.exit(1)
 
 class ClientWindow(Gtk.Window):
     def __init__(self):
         super().__init__(title="WhatsApp")
         self.set_default_size(1000, 700)
-        
-        # Define caminhos absolutos para garantir execução de qualquer lugar.
-        base_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "wtp_data")
+        base_path = get_app_data_path()
         log_file = os.path.join(base_path, "application.log")
-
-        # Tenta criar a pasta de dados, wtp_data, antes de tudo.
-        # Se falhar (ex: permissão negada), encerra o app para evitar crashs silenciosos.
-        try:
-            os.makedirs(base_path, exist_ok=True)
-        except OSError as error:
-            sys.stderr.write(f"CRITICAL: Falha ao criar diretório de dados: {error}\n")
-            sys.exit(1)
 
         # Salva logs em arquivos para auditoria.
         logging.basicConfig(
