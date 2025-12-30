@@ -80,8 +80,10 @@ class ClientWindow(Gtk.Window):
 
             self.webview = WebKit2.WebView.new_with_context(context)
 
-            self.webview.connect("decide-policy", self._on_decide_policy)
-            self.webview.connect("create", self._on_create_web_view)
+            # ----- WebView Connect -----
+            self.webview.connect("decide-policy", self._on_decide_policy) # Evita que links externos sejam abertos no wrapper.
+            self.webview.connect("create", self._on_create_web_view) # Captura tentativas de abrir novas janelas por JavaScript e redireciona para o navegador padrão.
+            self.webview.connect("permission-request", self._on_permission_request) # Gerencia as permissões de microfone e câmera.
 
             # Aplica o User Agent "falso" para passar pelo filtro do WhatsApp.
             settings = self.webview.get_settings()
@@ -100,6 +102,11 @@ class ClientWindow(Gtk.Window):
             # Captura falhas na engine do navegador.
             logging.critical(f"Erro fatal ao iniciar WebKit: {error}", exc_info=True)
             raise error
+
+    def _on_permission_request(self, webview, request):
+        logging.info("Permissão de dispositivo solicitada. Acesso concedido.")
+        request.allow()
+        return True
 
     def _on_decide_policy(self, webview, decision, decision_type):
         if decision_type == WebKit2.PolicyDecisionType.NAVIGATION_ACTION:
