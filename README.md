@@ -1,20 +1,25 @@
 # Python WhatsApp GTK
-> Um jeito simples de usar o WhatsApp no Linux.
+> Implementação nativa e otimizada do Whatsapp Web para Linux via WebKit.
 
 ![Screenshot do App](assets/screenshot.png)
 
 ## Sobre o Projeto
-Sempre prezei pelo equilíbrio entre **privacidade, segurança e conforto**. 
+Sempre prezei pelo equilíbrio entre **privacidade, eficiência e conforto**. 
 
-Embora achasse interessante a função **PWA** (Progressive Web App) de navegadores populares como Chrome ou Edge, abandonei o uso deles justamente por questões de privacidade e coleta de dados dos próprios navegadores. Além disso, apesar de saber da excelência de vários *ports* e *wrappers* feitos pela comunidade, resolvi criar minha própria solução:
+Embora as soluções baseadas em PWA (Chrome/Edge) e wrappers em Electron sejam funcionais, elas frequentemente introduzem um overhead significativo de recursos e camadas de coleta de dados do próprio navegador. A proposta aqui é desacoplar o WhatsApp de navegadores generalistas, criando uma instância dedicada e transparente.
 
-Fiz um **wrapper** em **Python** — linguagem com a qual tenho familiaridade — utilizando o **WebKit2**, que gera um ambiente **sandbox** isolado e sem telemetria por parte dos navegadores. 
+Fiz um **wrapper** em **Python** — linguagem com a qual tenho familiaridade — utilizando o **WebKit2**, que gera um ambiente isolado e sem telemetria por parte dos navegadores.
+
+**Nota sobre Privacidade:** O objetivo deste wrapper é mitigar a telemetria de terceiros (o rastreamento do navegador/browser). É importante ressaltar que, ao utilizar o WhatsApp Web, a interação e os dados trocados continuam sujeitos aos termos de uso e coleta de dados da Meta Platforms, Inc.
 
 > *"Recomendo a todos que criem vocês mesmos seus programas desse tipo. Caso não queiram, aí está o meu: transparente e auditável."*
 
 ## Funcionalidades
-- Navegador WebKit.
-- Isolamento de dados.
+- **Eficiência Máxima:** Motor WebKit2 otimizado para baixo consumo de RAM.
+- **Isolamento de Dados:** Sessão e cache isolados (padrão XDG).
+- **Notificações Nativas:** Suporte completo a notificações do sistema (via libnotify).
+- **Aceleração de Hardware:** Renderização via GPU para maior fluidez.
+- **Robustez:** Tratamento de erros de conexão com tentativa automática de reconexão.
 - Instalação integrada ao menu do sistema.
 - Suporte a gestos (padrão WebKit).
 
@@ -65,7 +70,8 @@ chmod +x install.sh
 ./install.sh
 ```
 
-## Desinstalação do programa:
+## Desinstalação do programa
+Para remover completamente a aplicação e seus resíduos de dados:
 ```bash
 # Remove o executável e o atalho
 rm ~/.local/bin/python-whatsapp-gtk
@@ -74,17 +80,45 @@ rm ~/.local/share/applications/python-whatsapp-gtk.desktop
 rm -rf ~/.local/share/python-whatsapp-gtk
 ```
 
-## Como funciona
-Diferente de aplicações baseadas em Electron (que embutem um navegador Chromium inteiro para cada app, consumindo muita RAM), este projeto utiliza as bibliotecas nativas do seu sistema Linux.
+## Arquitetura
+Diferente de aplicações construídas sobre o framework Electron — que empacotam uma instância completa do Chromium para cada aplicação — este projeto adota uma abordagem de reuso de bibliotecas do sistema.
 
-A arquitetura funciona em três camadas:
-1. Backend (Lógica): O Python 3 gerencia a criação da janela e o isolamento dos dados.
-2. Ponte (Bindings): O PyGObject (GObject Introspection) conecta o código Python diretamente às bibliotecas C/C++ do sistema GNOME.
-3. Engine (Renderização): O WebKit2 (mesmo motor do Safari) renderiza o WhatsApp Web.
+A arquitetura opera em três camadas distintas:
 
-O Diferencial: Isolamento de Dados: O script força o WebKit a criar um contexto de dados ("perfil") exclusivo dentro da pasta ~/.local/share/python-whatsapp-gtk. Isso garante que:
+1. **Backend (Python 3)**: Orquestra a lógica da aplicação, gerenciamento de janelas, travas de processo único (file locks) e tratamento de sinais do sistema.
+
+2. **Camada de Abstração (PyGObject):** Realiza os bindings via Introspecção GObject, permitindo que o código Python manipule diretamente as bibliotecas C/C++ do ecossistema GNOME sem penalidade de performance.
+
+**Engine (WebKit2):** Responsável pela renderização web, operando com perfil de dados exclusivo definido em ~/.local/share/python-whatsapp-gtk.
+
+![esquema da arquitetura](assets/architecture_schema.png)
+
+### O Diferencial:
+**Isolamento de Dados:** O script força o WebKit a criar um contexto de dados ("perfil") exclusivo dentro da pasta ~/.local/share/python-whatsapp-gtk. Isso garante que:
 - Seus cookies do WhatsApp não se misturam com seu navegador principal.
 - Você tem portabilidade total (basta copiar a pasta para fazer backup da sessão).
+**Otimização de Recursos:** Além do isolamento, o código desativa recursos desnecessários do WebKit2 (como corretor ortográfico e ferramentas de desenvolvedor) e força o uso da GPU, garantindo que o WhatsApp Web utilize o mínimo de recursos possível.
+
+## Performance
+
+Um dos focos deste projeto é eficiência. Em meus testes pessoais comparativos realizados em janeiro de 2026, o **Python WhatsApp GTK** se mostrou o mais leve para rodar o WhatsApp no Linux, consumindo significativamente menos RAM que
+navegadores tradicionais.
+
+Os testes foram realizados em um ambiente limpo, medindo o consumo médio de RAM (em MB) após o carregamento e scroll padronizado de um grupo com histórico de mensagens.
+
+![Comparativo do Consumo de RAM](assets/benchmark.png)
+
+| Cliente / Navegador | Consumo Médio de RAM | Diferença |
+| :--- | :---: | :--- |
+| **Python WhatsApp GTK** | **1.469 MB** | **(Referência)** |
+| Google Chrome | 1.668 MB | +13.5% |
+| ZapZap (QtWebEngine) | 1.715 MB | +16.7% |
+| Firefox (Padrão) | 2.129 MB | +44.9% |
+| Firefox (+Extensões) | 2.435 MB | +65.7% |
+
+> **Conclusão:** O wrapper economiza cerca de **200 MB** em comparação ao Google Chrome, e quase **1 GB** (966 MB) e, comparação a um Firefox com extensões de uso diário.
+
+Obs.: O *ZapZap* foi usado como parâmetro justamente por ser a referência em excelência e qualidade. Meu programa não se propõe a ser melhor que o ZapZap.
 
 ## Licença
 Este projeto é desenvolvido sob a Licença Pública Geral GNU v3.0 (GPLv3).

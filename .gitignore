@@ -1,2 +1,15 @@
-# Temporary .desktop
-*.desktop
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+# --- Logs e Arquivos de Execução ---
+*.log
+app.lock
+
+# --- Arquivos do Sistema Operacional ---
+.DS_Store
+Thumbs.db
+
+# --- IDEs ---
+.vscode/
+
