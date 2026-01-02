@@ -19,6 +19,15 @@ import logging
 import os
 import sys
 
+# Tenta importar a biblioteca de notificações. Se não tiver, segue sem ela.
+notifications_enabled = False
+try:
+    gi.require_version("Notify", "0.7")
+    from  gi.repository import Notify
+    notifications_enabled = True
+except ValueError:
+    logging.warning("Biblioteca de notificações não encontrada. Iniciando sem ela.")
+
 # Garante que as versões corretas das bibliotecas do sistema operacional sejam carregadas.
 gi.require_version("Gtk", "3.0")
 gi.require_version("WebKit2", "4.1")
@@ -77,6 +86,13 @@ class ClientWindow(Gtk.Window):
             context.set_cache_model(WebKit2.CacheModel.DOCUMENT_VIEWER)
             # Desativa o corretor ortográfico para economizar RAM
             context.set_spell_checking_enabled(False)
+
+            if notifications_enabled:
+                try:
+                    Notify.init("WhatsApp")
+                    context.connect("show-notification", self._on_show_notification)
+                except Exception as error:
+                    logging.warning(f"Erro ao inicializar notificações: {error}")
 
             self.webview = WebKit2.WebView.new_with_context(context)
             content_manager = self.webview.get_user_content_manager()
@@ -216,6 +232,21 @@ class ClientWindow(Gtk.Window):
         GLib.timeout_add_seconds(10, self.webview.reload)
         
         return True
+
+    def _on_show_notification(self, webview, notification):
+        # Exibe notificações nativas.
+        try:
+            n = Notify.Notification.new(
+                notification.get_title(),
+                notification.get_body(),
+                "dialog-information"
+            )
+            n.show()
+            logging.info("notificação enviada ao sistema.")
+            return True
+        except Exception as error:
+            logging.warning(f"Erro ao exibir notificação; {error}")
+            return False
 
     def _on_permission_request(self, webview, request):
         # Aceita automaticamente solicitações de microfone e câmera.
