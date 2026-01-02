@@ -18,34 +18,11 @@ import json
 import logging
 import os
 import sys
-import urllib.request
 
 # Garante que as versões corretas das bibliotecas do sistema operacional sejam carregadas.
 gi.require_version("Gtk", "3.0")
 gi.require_version("WebKit2", "4.1")
-from gi.repository import Gtk, WebKit2, GLib
-
-def get_latest_user_agent():
-    """
-    Busca o User_Agent mais recente para evitar manutenção manual constante.
-    Usa biblioteca nativa para não aumentar o consumo de RAM.
-    """
-    fallback_ua = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-    url = "https://jnrbsn.github.io/user-agents/user-agents.json"
-
-    try:
-        # Timeout curto para não travar a inicialização se estiver sem internet.
-        with urllib.request.urlopen(url, timeout=3) as response:
-            data = json.loads(response.read().decode())
-            if data and len(data) > 0:
-                # Retorna o primeiro da list (geralmente o mais novo/popular)
-                logging.info(f"User-Agent atualizado via nuvem {data[0]}")
-                return data[0]
-    except Exception as error:
-        logging.warning(f"Falha ao buscar User-Agent on-line ({error}).")
-    
-    # Se der erro ou se a lista vier vazia, apenas retorna o fallback.
-    return fallback_ua
+from gi.repository import Gtk, Gdk, WebKit2, GLib
 
 def get_app_data_path():
     # Retorna o diretório padrão do usuário (XDG Standard)
@@ -88,7 +65,7 @@ class ClientWindow(Gtk.Window):
             datefmt='%Y-%m-%d %H:%M:%S'
         )
         try:
-            # isola cookies e cache na pasta "wtp_data", sem misturar com o navegador do sistema operacional.
+            # isola cookies e cache na pasta designada, sem misturar com o navegador do sistema operacional.
             data_manager = WebKit2.WebsiteDataManager(
                 base_data_directory = self.base_path,
                 base_cache_directory = self.base_path
@@ -103,22 +80,57 @@ class ClientWindow(Gtk.Window):
 
             self.webview = WebKit2.WebView.new_with_context(context)
 
+            # Injeta CSS para ocultar banners de propaganda (Mac/Windows) e limpar a interface.
+            css_style = """
+                svg[viewBox="0 0 228 152"] { display: none !important; }
+
+                h1.html-h1 { display: none !important; }
+                h1.html-h1 ~ div button { display: none !important; }
+                
+                div:has(> h1.html-h1) { display: none !important; }
+
+                span[data-icon="wa-square-icon"] { display: none !important; }
+
+                div[role="button"]:has(span[data-icon="wa-square-icon"]) { display: none !important; }
+                
+                div[role="button"]:has(> div > span[data-icon="wa-square-icon"]) { display: none !important; }
+
+                div:has(> div > span[data-icon="web-login-desktop-upsell-illustration"]) { display: none !important; }          
+
+                div:has(> div > div > span[data-icon="web-login-desktop-upsell-illustration"]) { display: none !important; height: 0 !important; margin: 0 !important; padding: 0 !important; }
+
+                div:has(> div > div > div > span[data-icon="web-login-desktop-upsell-illustration"]) { display: none !important; height: 0 !important; margin: 0 !important; padding: 0 !important; }
+            """
+
+            style = WebKit2.UserStyleSheet.new(
+                css_style,
+                WebKit2.UserContentInjectedFrames.TOP_FRAME,
+                WebKit2.UserStyleLevel.USER,
+                None,
+                None
+            )
+
+            content_manager.add_style_sheet(style)
+
             # ----- WebView Connect -----
             self.connect("delete-event", self.save_window_state)
+            self.connect("key-press-event", self._on_key_press)
             self.webview.connect("decide-policy", self._on_decide_policy) # Evita que links externos sejam abertos no wrapper.
             self.webview.connect("create", self._on_create_web_view) # Captura tentativas de abrir novas janelas por JavaScript e redireciona para o navegador padrão.
             self.webview.connect("permission-request", self._on_permission_request) # Gerencia as permissões de microfone e câmera.
 
-            # Aplica o User Agent "falso" para passar pelo filtro do WhatsApp.
             settings = self.webview.get_settings()
 
+            # Força o uso da GPU para renderização.
             settings.set_hardware_acceleration_policy(WebKit2.HardwareAccelerationPolicy.ALWAYS)
 
             settings.set_enable_write_console_messages_to_stdout(False) # Limpa o terminal,
             settings.set_enable_developer_extras(False) # Desativa funções de desenvolvedor, economizando memória.
-
-            latest_ua = get_latest_user_agent()
-            settings.set_user_agent(latest_ua)
+            
+            # Define o navegador como Chrome no Linux.
+            # Isso evita que o WhatsApp peça atualização e garante compatibilidade.
+            user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+            settings.set_user_agent(user_agent)
 
             # Carrega a aplicação
             url = "https://web.whatsapp.com/"
@@ -172,7 +184,16 @@ class ClientWindow(Gtk.Window):
             logging.warning(f"Não foi possível restaurar o estado da janela: {error}")
         return False
 
+    def _on_key_press(self, widget, event):
+        # Permite recarregar a página pressionando F5
+        if event.keyval == Gdk.KEY_F5:
+            logging.info("Tecla F5 pressionada. Recarregando página...")
+            self.webview.reload()
+            return True
+        return False
+
     def _on_permission_request(self, webview, request):
+        # Aceita automaticamente solicitações de microfone e câmera.
         logging.info("Permissão de dispositivo solicitada. Acesso concedido.")
         request.allow()
         return True
