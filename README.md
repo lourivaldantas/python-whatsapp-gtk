@@ -1,5 +1,5 @@
 # Python WhatsApp GTK
-> Implementação nativa e otimizada do Whatsapp Web para Linux via WebKit.
+> Implementação nativa e otimizada do WhatsApp Web para Linux via WebKit.
 
 ![Screenshot do App](assets/screenshot.png)
 
@@ -116,7 +116,7 @@ Os testes foram realizados em um ambiente limpo, medindo o consumo médio de RAM
 | Firefox (Padrão) | 2.129 MB | +44.9% |
 | Firefox (+Extensões) | 2.435 MB | +65.7% |
 
-> **Conclusão:** O wrapper economiza cerca de **200 MB** em comparação ao Google Chrome, e quase **1 GB** (966 MB) e, comparação a um Firefox com extensões de uso diário.
+> **Conclusão:** O wrapper economiza cerca de **200 MB** em comparação ao Google Chrome, e quase **1 GB** (966 MB) em comparação a um Firefox com extensões de uso diário.
 
 Obs.: O *ZapZap* foi usado como parâmetro justamente por ser a referência em excelência e qualidade. Meu programa não se propõe a ser melhor que o ZapZap.
 
