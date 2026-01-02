@@ -66,10 +66,10 @@ chmod +x install.sh
 ## Desinstalação do programa:
 ```bash
 # Remove o executável e o atalho
-rm -v ~/.local/bin/python-whatsapp-gtk
-rm -v ~/.local/share/applications/python-whatsapp-gtk.desktop
+rm ~/.local/bin/python-whatsapp-gtk
+rm ~/.local/share/applications/python-whatsapp-gtk.desktop
 # Remove os dados de navegação (Login, Cache, Cookies)
-rm -rv ~/.local/share/python-whatsapp-gtk
+rm -r ~/.local/share/python-whatsapp-gtk
 ```
 
 ## Como funciona

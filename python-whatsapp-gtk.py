@@ -79,6 +79,7 @@ class ClientWindow(Gtk.Window):
             context.set_spell_checking_enabled(False)
 
             self.webview = WebKit2.WebView.new_with_context(context)
+            content_manager = self.webview.get_user_content_manager()
 
             # Injeta CSS para ocultar banners de propaganda (Mac/Windows) e limpar a interface.
             css_style = """
@@ -115,6 +116,7 @@ class ClientWindow(Gtk.Window):
             # ----- WebView Connect -----
             self.connect("delete-event", self.save_window_state)
             self.connect("key-press-event", self._on_key_press)
+            self.webview.connect("load-failed", self._on_load_failed)
             self.webview.connect("decide-policy", self._on_decide_policy) # Evita que links externos sejam abertos no wrapper.
             self.webview.connect("create", self._on_create_web_view) # Captura tentativas de abrir novas janelas por JavaScript e redireciona para o navegador padrão.
             self.webview.connect("permission-request", self._on_permission_request) # Gerencia as permissões de microfone e câmera.
@@ -191,6 +193,29 @@ class ClientWindow(Gtk.Window):
             self.webview.reload()
             return True
         return False
+
+    def _on_load_failed(self, webview, load_event, failing_uri, error):
+        # Tenta reconexão caso a internet fique fora do ar.
+        logging.error(f"Falha ao carregar {failing_uri}: {error.message}")
+        
+        # Cria um pop-up nativo de erro
+        dialog = Gtk.MessageDialog(
+            parent=self,
+            flags=Gtk.DialogFlags.MODAL,
+            type=Gtk.MessageType.ERROR,
+            buttons=Gtk.ButtonsType.CLOSE,
+            message_format="Falha de Conexão"
+        )
+        dialog.format_secondary_text(
+            f"Não foi possível carregar o WhatsApp Web.\n\nVerifique sua internet.\nDetalhe: {error.message}\n\nTentando reconectar em 10 segundos..."
+        )
+        dialog.run()
+        dialog.destroy()
+        
+        # Tenta recarregar a página automaticamente após 10 segundos
+        GLib.timeout_add_seconds(10, self.webview.reload)
+        
+        return True
 
     def _on_permission_request(self, webview, request):
         # Aceita automaticamente solicitações de microfone e câmera.
