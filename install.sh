@@ -1,30 +1,92 @@
 #!/bin/bash
 
-# Capta o diretório atual e onde o script foi executado.
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-USER_APPS_DIR="$HOME/.local/share/applications"
+SOURCE_FILE="python-whatsapp-gtk.py"
+APP_NAME="python-whatsapp-gtk"
+ICON_SOURCE="assets/icon.png"
 
-# Mensagem de instalação.
-echo " Instalando Python WhatsApp GTK. . . "
-echo " Diretório do projeto detectado: $DIR "
+INSTALL_BIN="$HOME/.local/bin"
+INSTALL_SHARE="$HOME/.local/share/python-whatsapp-gtk"
+INSTALL_DESKTOP="$HOME/.local/share/applications"
 
-# Dá permissão de execução para o main.py
-chmod +x "$DIR/main.py"
+echo "Iniciando a instalação do Python WhatsApp GTK."
 
-# Cria o arquivo WhatsApp.desktop.
-cat <<FIM > "$DIR/whatsapp.desktop"
+# =============================================
+# VERIFICAÇÃO DAS DEPENDÊNCIAS
+# =============================================
+
+echo "Verificando dependências..."
+
+if ! command -v python3 &> /dev/null; then
+    echo "Python 3 não foi encontrado. Instale-o primeiro."
+    echo "Confira o README.md para ver como instalar em sua distribuição Linux."
+    exit 1
+fi
+
+python3 -c "import gi" 2>/dev/null
+
+if [ $? -ne 0 ]; then
+    echo "A biblioteca PyGObject (GTK para Python) não foi encontrada. Instale-a primeiro."
+    echo "Confira o README.md para ver como instalar em sua distribuição Linux."
+    exit 1
+fi
+
+# =============================================
+# PREPARAÇÃO DOS DIRETÓRIOS
+# =============================================
+
+mkdir -p "$INSTALL_BIN"
+mkdir -p "$INSTALL_SHARE"
+mkdir -p "$INSTALL_DESKTOP"
+
+# =============================================
+# INSTALAÇÃO DO EXECUTÁVEL
+# =============================================
+
+if [ ! -f "$SOURCE_FILE" ]; then
+    echo "Erro. Arquivo $SOURCE_FILE não foi encontrado na pasta atual."
+    echo "Certifique-se de estar rodando o install.sh na pasta raiz do projeto."
+    exit 1
+fi
+
+echo "Instalando o executável em $INSTALL_BIN."
+cp "$SOURCE_FILE" "$INSTALL_BIN/$APP_NAME"
+chmod +x "$INSTALL_BIN/$APP_NAME"
+
+# =============================================
+# INSTALAÇÃO DO ÍCONE
+# =============================================
+
+if [ -f "$ICON_SOURCE" ]; then
+    echo "Copiando ícone para $INSTALL_SHARE"
+    cp "$ICON_SOURCE" "$INSTALL_SHARE/icon.png"
+else
+    echo "Aviso: Ícone não encontrado. Usando ícone genérico."
+fi
+
+# =============================================
+# CRIAÇÃO DO ATALHO
+# =============================================
+
+cat > "$INSTALL_DESKTOP/$APP_NAME.desktop" <<FIM
 [Desktop Entry]
 Name=WhatsApp
-Comment=Cliente simples para o WhatsApp Web
-Exec=$DIR/main.py
-Icon=$DIR/assets/icon.png
+Comment=Cliente WhatsApp não-oficial
+Exec=$INSTALL_BIN/$APP_NAME
+Icon=$INSTALL_SHARE/icon.png
+Terminal=false
 Type=Application
 Categories=Network;Chat;
-Terminal=false
-StartupNotify=true
+StartupWMClass=whatsapp
+X-GNOME-SingleWindow=true
 FIM
 
-# Move o arquivo para a pasta de aplicativos do usuário.
-mv "$DIR/whatsapp.desktop" "$USER_APPS_DIR/"
+# =============================================
+# FINALIZAÇÃO
+# =============================================
 
-echo "Instalação concluida!"
+# Atualiza o banco de dados do ambiente gráfico para reconhecer o novo app
+update-desktop-database "$INSTALL_DESKTOP" 2>/dev/null
+
+echo "Instalação concluída com sucesso!"
+echo "O app 'WhatsApp' deve aparecer no seu menu de aplicativos em instantes."
+echo "Para desinstalar, basta remover os arquivos criados em ~/.local/"

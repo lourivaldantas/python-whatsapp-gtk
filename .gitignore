@@ -1,5 +1,15 @@
-#Whatsapp cache
-wtp_data/
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+# --- Logs e Arquivos de Execução ---
+*.log
+app.lock
 
-# Temporary .desktop
-*.desktop
+# --- Arquivos do Sistema Operacional ---
+.DS_Store
+Thumbs.db
+
+# --- IDEs ---
+.vscode/
+
