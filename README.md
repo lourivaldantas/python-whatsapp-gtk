@@ -1,5 +1,5 @@
 # Python WhatsApp GTK
-> Implementação nativa e otimizada do WhatsApp Web para Linux via WebKit.
+> Implementação integrada e otimizada do WhatsApp Web para Linux via WebKit.
 
 ![Screenshot do App](assets/screenshot.png)
 
@@ -17,7 +17,7 @@ Fiz um **wrapper** em **Python** — linguagem com a qual tenho familiaridade �
 ## Funcionalidades
 - **Eficiência Máxima:** Motor WebKit2 otimizado para baixo consumo de RAM.
 - **Isolamento de Dados:** Sessão e cache isolados (padrão XDG).
-- **Notificações Nativas:** Suporte completo a notificações do sistema (via libnotify).
+- **Notificações:** Suporte completo a notificações do sistema (via libnotify).
 - **Aceleração de Hardware:** Renderização via GPU para maior fluidez.
 - **Robustez:** Tratamento de erros de conexão com tentativa automática de reconexão.
 - Instalação integrada ao menu do sistema.
@@ -89,7 +89,7 @@ A arquitetura opera em três camadas distintas:
 
 2. **Camada de Abstração (PyGObject):** Realiza os bindings via Introspecção GObject, permitindo que o código Python manipule diretamente as bibliotecas C/C++ do ecossistema GNOME sem penalidade de performance.
 
-**Engine (WebKit2):** Responsável pela renderização web, operando com perfil de dados exclusivo definido em ~/.local/share/python-whatsapp-gtk.
+3. **Engine (WebKit2):** Responsável pela renderização web, operando com perfil de dados exclusivo definido em ~/.local/share/python-whatsapp-gtk.
 
 ![esquema da arquitetura](assets/architecture_schema.png)
 
@@ -97,6 +97,7 @@ A arquitetura opera em três camadas distintas:
 **Isolamento de Dados:** O script força o WebKit a criar um contexto de dados ("perfil") exclusivo dentro da pasta ~/.local/share/python-whatsapp-gtk. Isso garante que:
 - Seus cookies do WhatsApp não se misturam com seu navegador principal.
 - Você tem portabilidade total (basta copiar a pasta para fazer backup da sessão).
+
 **Otimização de Recursos:** Além do isolamento, o código desativa recursos desnecessários do WebKit2 (como corretor ortográfico e ferramentas de desenvolvedor) e força o uso da GPU, garantindo que o WhatsApp Web utilize o mínimo de recursos possível.
 
 ## Performance
