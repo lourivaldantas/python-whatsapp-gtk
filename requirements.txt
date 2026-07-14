@@ -1,1 +1,4 @@
-PyGObject>=3.42.0
+# O PyGObject deve vir dos pacotes do sistema (python3-gi / python3-gobject /
+# python-gobject), junto com GTK 4 e WebKitGTK 6.0 — veja o README.
+# Instalar PyGObject via pip exige toolchain de compilação e não traz o WebKit.
+PyGObject>=3.46.0

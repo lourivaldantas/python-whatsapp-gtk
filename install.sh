@@ -1,4 +1,5 @@
 #!/bin/bash
+set -u
 
 # Cores para saída
 RED='\033[0;31m'
@@ -8,35 +9,26 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 APP_NAME="python-whatsapp-gtk"
+APP_ID="io.github.lourivaldantas.whatsapp"
 ICON_SOURCE="assets/icon.png"
 
 INSTALL_BIN="$HOME/.local/bin"
 INSTALL_SHARE="$HOME/.local/share/python-whatsapp-gtk"
 INSTALL_DESKTOP="$HOME/.local/share/applications"
+INSTALL_ICONS="$HOME/.local/share/icons/hicolor/256x256/apps"
 
 print_header() {
     echo -e "${BLUE}"
     echo "=============================================="
-    echo "      Python WhatsApp GTK - Instalador"
+    echo "   Python WhatsApp GTK 2.0 - Instalador"
     echo "=============================================="
     echo -e "${NC}"
 }
 
-print_status() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
-
-print_success() {
-    echo -e "${GREEN}[OK]${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}[AVISO]${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}[ERRO]${NC} $1"
-}
+print_status()  { echo -e "${BLUE}[INFO]${NC} $1"; }
+print_success() { echo -e "${GREEN}[OK]${NC} $1"; }
+print_warning() { echo -e "${YELLOW}[AVISO]${NC} $1"; }
+print_error()   { echo -e "${RED}[ERRO]${NC} $1"; }
 
 print_header
 
@@ -53,28 +45,44 @@ if ! command -v python3 &> /dev/null; then
 fi
 print_success "Python 3 encontrado."
 
-# Verifica PyGObject
-python3 -c "import gi" 2>/dev/null
-if [ $? -ne 0 ]; then
-    print_error "Biblioteca PyGObject (GTK) não encontrada."
-    echo "Instale os bindings GTK para Python (ex: python3-gi ou python-gobject)."
+if ! python3 -c "import gi" 2>/dev/null; then
+    print_error "Biblioteca PyGObject não encontrada."
+    echo "Instale os bindings GObject para Python (ex: python3-gi ou python3-gobject)."
     exit 1
 fi
-print_success "PyGObject (GTK) encontrado."
+print_success "PyGObject encontrado."
 
+if ! python3 -c "import gi; gi.require_version('Gtk', '4.0')" 2>/dev/null; then
+    print_error "GTK 4 não encontrado."
+    echo "  Debian/Ubuntu: sudo apt install gir1.2-gtk-4.0"
+    echo "  Fedora:        sudo dnf install gtk4"
+    echo "  Arch Linux:    sudo pacman -S gtk4"
+    exit 1
+fi
+print_success "GTK 4 encontrado."
+
+if ! python3 -c "import gi; gi.require_version('WebKit', '6.0')" 2>/dev/null; then
+    print_error "WebKitGTK 6.0 não encontrado."
+    echo "  Debian/Ubuntu: sudo apt install gir1.2-webkit-6.0"
+    echo "  Fedora:        sudo dnf install webkitgtk6.0"
+    echo "  Arch Linux:    sudo pacman -S webkitgtk-6.0"
+    exit 1
+fi
+print_success "WebKitGTK 6.0 encontrado."
 
 # =============================================
 # PREPARAÇÃO DOS DIRETÓRIOS
 # =============================================
 
 print_status "Preparando diretórios de instalação..."
-mkdir -p "$INSTALL_BIN"
-mkdir -p "$INSTALL_SHARE"
-mkdir -p "$INSTALL_DESKTOP"
+mkdir -p "$INSTALL_BIN" "$INSTALL_SHARE" "$INSTALL_DESKTOP" "$INSTALL_ICONS"
 
 # =============================================
-# INSTALAÇÃO DO EXECUTÁVEL
+# LIMPEZA DE VERSÕES ANTERIORES (1.x)
 # =============================================
+
+rm -f "$INSTALL_DESKTOP/$APP_NAME.desktop"   # atalho da versão 1.x
+rm -rf "$INSTALL_SHARE/whatsapp"             # pacote antigo
 
 # =============================================
 # INSTALAÇÃO DO PACOTE E EXECUTÁVEL
@@ -82,37 +90,34 @@ mkdir -p "$INSTALL_DESKTOP"
 
 print_status "Copiando arquivos da aplicação..."
 
-# Limpa instalação anterior se existir para evitar conflitos
-rm -rf "$INSTALL_SHARE/whatsapp"
-
-# Copia o pacote Python para ~/.local/share/python-whatsapp-gtk/whatsapp
 if [ -d "whatsapp" ]; then
     cp -r whatsapp "$INSTALL_SHARE/"
+    find "$INSTALL_SHARE/whatsapp" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
     print_success "Pacote Python copiado para $INSTALL_SHARE"
 else
-    print_error "Diretório 'whatsapp' não encontrado!"
+    print_error "Diretório 'whatsapp' não encontrado! Execute o instalador na raiz do repositório."
     exit 1
 fi
 
-# Cria o script de lançamento em ~/.local/bin/python-whatsapp-gtk
 print_status "Criando executável..."
 cat > "$INSTALL_BIN/$APP_NAME" <<EOF
 #!/bin/bash
 export PYTHONPATH="$INSTALL_SHARE"
 exec python3 -m whatsapp "\$@"
 EOF
-
 chmod +x "$INSTALL_BIN/$APP_NAME"
 print_success "Executável instalado em $INSTALL_BIN/$APP_NAME"
+
 # =============================================
 # INSTALAÇÃO DO ÍCONE
 # =============================================
 
-# The icon is already copied in the previous step, so this block can be simplified or removed.
-# For now, keeping it as is, but it will effectively re-copy the icon.
 if [ -f "$ICON_SOURCE" ]; then
     cp "$ICON_SOURCE" "$INSTALL_SHARE/icon.png"
-    print_success "Ícone copiado para $INSTALL_SHARE"
+    # Ícone no tema hicolor com o nome do APP_ID (usado por janela e notificações)
+    cp "$ICON_SOURCE" "$INSTALL_ICONS/$APP_ID.png"
+    gtk-update-icon-cache "$HOME/.local/share/icons/hicolor" 2>/dev/null
+    print_success "Ícone instalado."
 else
     print_warning "Ícone padrão não encontrado ($ICON_SOURCE). Usando genérico."
 fi
@@ -121,20 +126,24 @@ fi
 # CRIAÇÃO DO ATALHO
 # =============================================
 
-cat > "$INSTALL_DESKTOP/$APP_NAME.desktop" <<FIM
+# O arquivo .desktop DEVE se chamar $APP_ID.desktop para que as
+# notificações nativas (Gio) e o agrupamento de janelas funcionem.
+cat > "$INSTALL_DESKTOP/$APP_ID.desktop" <<FIM
 [Desktop Entry]
 Name=WhatsApp
-Comment=Cliente WhatsApp não-oficial
+Comment=Cliente WhatsApp não-oficial (GTK4/WebKit)
 Exec=$INSTALL_BIN/$APP_NAME
-Icon=$INSTALL_SHARE/icon.png
+Icon=$APP_ID
 Terminal=false
 Type=Application
-Categories=Network;Chat;
-StartupWMClass=whatsapp
+Categories=Network;Chat;InstantMessaging;
+StartupNotify=true
+StartupWMClass=$APP_ID
+X-GNOME-UsesNotifications=true
 X-GNOME-SingleWindow=true
 FIM
 
-print_success "Atalho criado em $INSTALL_DESKTOP"
+print_success "Atalho criado em $INSTALL_DESKTOP/$APP_ID.desktop"
 
 # =============================================
 # FINALIZAÇÃO
@@ -151,5 +160,6 @@ echo "O app 'WhatsApp' deve aparecer no seu menu de aplicativos."
 echo "Para desinstalar, remova:"
 echo "  - $INSTALL_BIN/$APP_NAME"
 echo "  - $INSTALL_SHARE"
-echo "  - $INSTALL_DESKTOP/$APP_NAME.desktop"
+echo "  - $INSTALL_DESKTOP/$APP_ID.desktop"
+echo "  - $INSTALL_ICONS/$APP_ID.png"
 echo ""

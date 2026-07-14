@@ -4,12 +4,12 @@
 
 </br>
 
-![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
+![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/github/license/lourivaldantas/python-whatsapp-gtk)
 ![Status](https://img.shields.io/badge/status-active-success)
 ![Platform](https://img.shields.io/badge/platform-linux-lightgrey)
 
-**Implementação integrada e otimizada do WhatsApp Web para Linux via WebKit2GTK.**
+**Implementação integrada e otimizada do WhatsApp Web para Linux via GTK 4 + WebKitGTK 6.0.**
 
 ![Screenshot do App](assets/screenshot.png)
 
@@ -17,62 +17,59 @@
 
 ## Sobre o Projeto
 
-> ATENÇÃO: Depois da última atualização que a Meta fez no WhatsApp Web, a vesão atual (1.1) do Python WhatsApp GTK está instável. Em breve, uma nova versão corrigida será lançada.
+> **Novidade (v2.0):** o aplicativo foi completamente reescrito sobre **GTK 4** e **WebKitGTK 6.0**, corrigindo as instabilidades da série 1.x e modernizando toda a integração com o desktop (notificações nativas, modo escuro via portal XDG, instância única via D-Bus e recuperação automática de falhas).
 
 Sempre prezei pelo equilíbrio entre **privacidade, eficiência e conforto**.
 
 Embora soluções PWA (Chrome/Edge) e Electron sejam funcionais, elas frequentemente trazem o peso de um navegador completo. Este projeto desacopla o WhatsApp de navegadores generalistas, criando uma instância dedicada, leve e transparente.
 
-Fiz um **wrapper** em **Python** — linguagem com a qual tenho familiaridade — utilizando o **WebKit2**, que gera um ambiente isolado e sem telemetria por parte dos navegadores.
+Fiz um **wrapper** em **Python** — linguagem com a qual tenho familiaridade — utilizando o **WebKitGTK**, que gera um ambiente isolado e sem telemetria por parte dos navegadores.
 
 **Nota sobre Privacidade:** O objetivo deste wrapper é mitigar a telemetria de terceiros (o rastreamento do navegador/browser). É importante ressaltar que, ao utilizar o WhatsApp Web, a interação e os dados trocados continuam sujeitos aos termos de uso e coleta de dados da Meta Platforms, Inc.
 
 ## Funcionalidades Principais
 
-- 🚀 **Eficiência Máxima:** Motor WebKit2 otimizado para baixo consumo de RAM.
-- 🔒 **Isolamento de Dados:** Sessão e cache isolados (sem misturar com seu Chrome/Firefox).
-- 🔔 **Notificações:** Suporte completo a notificações com o sistema (libnotify).
-- 📥 **Gerenciador de Downloads:** Salve PDFs, imagens e documentos onde quiser.
-- 🌗 **Modo Escuro Automático:** Segue o tema do seu ambiente Linux.
-- ⚡ **Aceleração Hardware:** Renderização via GPU.
+- 🚀 **Eficiência Máxima:** Motor WebKitGTK 6.0 otimizado para baixo consumo de RAM.
+- 🔒 **Isolamento de Dados:** Sessão, cookies e cache isolados (sem misturar com seu Chrome/Firefox).
+- 🔔 **Notificações Nativas:** Integração direta com o sistema via Gio/D-Bus — sem dependências extras; clicar na notificação traz a janela de volta.
+- 📥 **Gerenciador de Downloads:** Salve PDFs, imagens e documentos onde quiser, com atalho "Abrir pasta" na notificação de conclusão.
+- 🌗 **Modo Escuro Automático:** Segue a preferência do desktop em tempo real (portal XDG — GNOME, KDE e outros).
+- ⚡ **Aceleração de Hardware:** Renderização via GPU.
+- 🔁 **Recuperação Automática:** Reconexão automática em falha de rede e recarregamento em caso de queda do processo de renderização.
+- 🪟 **Instância Única:** Abrir o app novamente apenas apresenta a janela existente (via D-Bus, sem file locks).
+- 🔍 **Zoom e Atalhos:** `Ctrl` `+`/`-`/`0` para zoom (persistente), `F5`/`Ctrl+R` recarrega, `F11` tela cheia, `Ctrl+Q` sai.
 
 ## Pré-requisitos
-Para instalar o wrapper, você precisa do Git, Python 3 e das bibliotecas do sistema do GTK, WebKit e notificações.
+Para instalar o wrapper, você precisa do Git, Python 3 e das bibliotecas do sistema do GTK 4 e do WebKitGTK 6.0.
 
 ### Debian / Ubuntu
 ```bash
 sudo apt update
-sudo apt install -y git python3 python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1 gir1.2-notify-0.7 libnotify-bin
+sudo apt install -y git python3 python3-gi gir1.2-gtk-4.0 gir1.2-webkit-6.0
 ```
 
 **Fedora / Red Hat**
 ```bash
-sudo dnf install git python3 python3-gobject python3-cairo gtk3 webkit2gtk4.1 libnotify
+sudo dnf install git python3 python3-gobject gtk4 webkitgtk6.0
 ```
 
 **Arch Linux / Manjaro**
 ```bash
-sudo pacman -S git python python-gobject python-cairo gtk3 webkit2gtk-4.1 libnotify
-```
-
-### Slackware
-```bash
-sudo slackpkg update
-sudo slackpkg install git python3 pygobject3 pycairo gtk+3 webkit2gtk libnotify
+sudo pacman -S git python python-gobject gtk4 webkitgtk-6.0
 ```
 
 ### Dicionário de Pacotes
 Referência cruzada das dependências por distribuição:
 
-| **Componente** | **Debian/Ubuntu** | **Fedora** | **Arch Linux** | **Slackware** |
-| :--- | :--- | :--- | :--- | :--- |
-| **GIT** | `git` | `git` | `git` | `git` |
-| **Linguagem** | `python3` | `python3` | `python` | `python3` |
-| **GObject** | `python3-gi` | `python3-gobject` | `python-gobject` | `pygobject3` |
-| **Cairo** | `python3-gi-cairo` | `python3-cairo` | `python-cairo` | `pycairo` |
-| **GTK 3** | `gir1.2-gtk-3.0` | `gtk3` | `gtk3` | `gtk+3` |
-| **WebKit 4.1** | `gir1.2-webkit2-4.1` | `webkit2gtk4.1` | `webkit2gtk-4.1` | `webkit2gtk` |
-| **Notificações** | `libnotify-bin` | `libnotify` | `libnotify` | `libnotify` |
+| **Componente** | **Debian/Ubuntu** | **Fedora** | **Arch Linux** |
+| :--- | :--- | :--- | :--- |
+| **GIT** | `git` | `git` | `git` |
+| **Linguagem** | `python3` | `python3` | `python` |
+| **GObject** | `python3-gi` | `python3-gobject` | `python-gobject` |
+| **GTK 4** | `gir1.2-gtk-4.0` | `gtk4` | `gtk4` |
+| **WebKitGTK 6.0** | `gir1.2-webkit-6.0` | `webkitgtk6.0` | `webkitgtk-6.0` |
+
+> **Slackware:** o WebKitGTK 6.0 (variante GTK 4) pode não estar no repositório oficial da sua versão; verifique o [SlackBuilds.org](https://slackbuilds.org) ou o Slackware `-current`.
 
 ## Instalação e uso
 ### 1. Clone o repositório:
@@ -89,6 +86,11 @@ chmod +x install.sh
 
 **Pronto!** O ícone do WhatsApp aparecerá no seu menu de aplicativos.
 
+Para rodar direto do repositório (sem instalar):
+```bash
+python3 run.py
+```
+
 ---
 
 ## Configuração Avançada
@@ -100,7 +102,7 @@ Edite o arquivo criado automaticamente em: `~/.local/share/python-whatsapp-gtk/c
 Exemplo de `config.json`:
 ```json
 {
-    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
 }
 ```
 
@@ -109,20 +111,26 @@ Exemplo de `config.json`:
 ## Solução de Problemas (Troubleshooting)
 
 **Erro "ModuleNotFoundError: No module named 'gi'"**
-- Faltam os bindings do GTK para Python (`python3-gi` ou `python-gobject`).
+- Faltam os bindings GObject para Python (`python3-gi` ou `python3-gobject`).
+
+**Erro "Namespace WebKit not available" (ou Gtk 4.0)**
+- Falta o WebKitGTK 6.0 (variante GTK 4) ou o GTK 4. Veja a tabela de pacotes acima — atenção: o pacote `webkit2gtk-4.1` (GTK 3) **não** serve para a versão 2.0.
 
 **O app fecha imediatamente**
-- Rode via terminal: `python3 -m whatsapp` para ver o erro.
-- Verifique se não há outra instância travada rodando em segundo plano.
+- Rode via terminal: `python3 -m whatsapp` para ver o erro (os logs também ficam em `~/.local/share/python-whatsapp-gtk/application.log`).
+
+**As notificações não aparecem**
+- As notificações nativas exigem o atalho `.desktop` criado pelo instalador. Rode `./install.sh` e abra o app pelo menu de aplicativos.
 
 ---
 
 ## Desinstalação do programa
 Para remover completamente a aplicação e seus resíduos de dados:
 ```bash
-# Remove o executável e o atalho
+# Remove o executável, o atalho e o ícone
 rm ~/.local/bin/python-whatsapp-gtk
-rm ~/.local/share/applications/python-whatsapp-gtk.desktop
+rm ~/.local/share/applications/io.github.lourivaldantas.whatsapp.desktop
+rm ~/.local/share/icons/hicolor/256x256/apps/io.github.lourivaldantas.whatsapp.png
 # Remove os dados de navegação (Login, Cache, Cookies)
 rm -rf ~/.local/share/python-whatsapp-gtk
 ```
@@ -132,25 +140,26 @@ Diferente de aplicações construídas sobre o framework Electron — que empaco
 
 A arquitetura opera em três camadas distintas:
 
-1. **Backend (Python 3)**: Orquestra a lógica da aplicação, gerenciamento de janelas, travas de processo único (file locks) e tratamento de sinais do sistema.
+1. **Backend (Python 3):** Orquestra a lógica da aplicação via `Gtk.Application` — instância única por D-Bus, ações e atalhos globais, notificações Gio, persistência de estado da janela e tratamento de sinais do sistema.
 
 2. **Camada de Abstração (PyGObject):** Realiza os bindings via Introspecção GObject, permitindo que o código Python manipule diretamente as bibliotecas C/C++ do ecossistema GNOME sem penalidade de performance.
 
-3. **Engine (WebKit2):** Responsável pela renderização web, operando com perfil de dados exclusivo definido em ~/.local/share/python-whatsapp-gtk.
+3. **Engine (WebKitGTK 6.0):** Responsável pela renderização web, operando com uma `NetworkSession` de dados exclusiva definida em `~/.local/share/python-whatsapp-gtk`.
 
 ![esquema da arquitetura](assets/architecture_schema.png)
 
 ### O Diferencial:
-**Isolamento de Dados:** O script força o WebKit a criar um contexto de dados ("perfil") exclusivo dentro da pasta ~/.local/share/python-whatsapp-gtk. Isso garante que:
+**Isolamento de Dados:** O aplicativo cria uma sessão de rede ("perfil") exclusiva dentro da pasta `~/.local/share/python-whatsapp-gtk`. Isso garante que:
 - Seus cookies do WhatsApp não se misturam com seu navegador principal.
 - Você tem portabilidade total (basta copiar a pasta para fazer backup da sessão).
 
-**Otimização de Recursos:** Além do isolamento, o código desativa recursos desnecessários do WebKit2 (como corretor ortográfico e ferramentas de desenvolvedor) e força o uso da GPU, garantindo que o WhatsApp Web utilize o mínimo de recursos possível.
+**Otimização de Recursos:** Além do isolamento, o código desativa recursos desnecessários do WebKit (corretor ortográfico, ferramentas de desenvolvedor, rastreamento inteligente) e força o uso da GPU, garantindo que o WhatsApp Web utilize o mínimo de recursos possível.
+
+**Integração com o Desktop:** O modo escuro acompanha a preferência do sistema em tempo real através do portal XDG (`org.freedesktop.appearance`), o mecanismo padrão usado pelos aplicativos GNOME/KDE modernos — sem hacks de JavaScript injetado.
 
 ## Performance
 
-Um dos focos deste projeto é eficiência. Em meus testes pessoais comparativos realizados em janeiro de 2026, o **Python WhatsApp GTK** se mostrou o mais leve para rodar o WhatsApp no Linux, consumindo significativamente menos RAM que
-navegadores tradicionais.
+Um dos focos deste projeto é eficiência. Em meus testes pessoais comparativos realizados em janeiro de 2026 (com a versão 1.x), o **Python WhatsApp GTK** se mostrou o mais leve para rodar o WhatsApp no Linux, consumindo significativamente menos RAM que navegadores tradicionais.
 
 Os testes foram realizados em um ambiente limpo, medindo o consumo médio de RAM (em MB) após o carregamento e scroll padronizado de um grupo com histórico de mensagens.
 
