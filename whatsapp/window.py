@@ -8,7 +8,28 @@ from typing import Any, Dict, Optional
 import gi
 
 gi.require_version("Gtk", "4.0")
-from gi.repository import GLib, Gtk
+from gi.repository import Gdk, GLib, Gtk
+
+# Aviso curto e autodescartável exibido sobre o conteúdo (feedback de ações).
+_TOAST_SECONDS = 3
+_TOAST_CSS = b"""
+.app-toast {
+    background-color: rgba(20, 20, 20, 0.85);
+    color: #f5f5f5;
+    border-radius: 999px;
+    padding: 10px 20px;
+    margin: 0 0 28px 0;
+    font-weight: 600;
+}
+.drop-hint {
+    background-color: rgba(0, 0, 0, 0.55);
+    color: #ffffff;
+    border: 3px dashed rgba(255, 255, 255, 0.7);
+    border-radius: 24px;
+    margin: 40px;
+    padding: 48px 64px;
+}
+"""
 
 from .constants import (
     APP_ID,
@@ -21,7 +42,12 @@ from .constants import (
     ZOOM_STEP,
 )
 from .downloads import DownloadManager
-from .webview import WhatsAppWebView
+from .webview import (
+    ATTACH_BUSY,
+    ATTACH_NO_CHAT,
+    ATTACH_TOO_BIG,
+    WhatsAppWebView,
+)
 
 
 class WhatsAppWindow(Gtk.ApplicationWindow):
@@ -44,7 +70,8 @@ class WhatsAppWindow(Gtk.ApplicationWindow):
 
         self.web = WhatsAppWebView(
             base_path=self._base_path,
-            config=application.config,
+            user_agent=application.user_agent,
+            chrome_major=application.chrome_major,
             on_load_committed=self._show_web,
             on_load_failed=self._show_error,
             on_title_changed=self._sync_title,
@@ -59,12 +86,127 @@ class WhatsAppWindow(Gtk.ApplicationWindow):
         self._stack.add_named(self._build_loading_page(), "loading")
         self._stack.add_named(self.web.view, "web")
         self._stack.add_named(self._build_error_page(), "error")
-        self.set_child(self._stack)
 
+        overlay = Gtk.Overlay()
+        overlay.set_child(self._stack)
+        overlay.add_overlay(self._build_drop_hint())
+        overlay.add_overlay(self._build_toast())
+        self.set_child(overlay)
+
+        self._setup_drop_target()
         self.connect("close-request", self._on_close_request)
 
         self._stack.set_visible_child_name("loading")
         self.web.load()
+
+    # ------------------------------------------------------------------ #
+    # Toast (feedback discreto sobre o conteúdo)
+
+    def _build_toast(self) -> Gtk.Widget:
+        provider = Gtk.CssProvider()
+        provider.load_from_data(_TOAST_CSS)
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+
+        self._toast_label = Gtk.Label()
+        self._toast_label.add_css_class("app-toast")
+        self._toast_source: Optional[int] = None
+
+        self._toast_revealer = Gtk.Revealer(
+            child=self._toast_label,
+            transition_type=Gtk.RevealerTransitionType.CROSSFADE,
+            halign=Gtk.Align.CENTER,
+            valign=Gtk.Align.END,
+            can_target=False,
+        )
+        return self._toast_revealer
+
+    def show_toast(self, text: str) -> None:
+        """Mostra um aviso discreto que some sozinho."""
+        self._toast_label.set_label(text)
+        self._toast_revealer.set_reveal_child(True)
+        if self._toast_source is not None:
+            GLib.source_remove(self._toast_source)
+        self._toast_source = GLib.timeout_add_seconds(_TOAST_SECONDS, self._hide_toast)
+
+    def _hide_toast(self) -> bool:
+        self._toast_source = None
+        self._toast_revealer.set_reveal_child(False)
+        return GLib.SOURCE_REMOVE
+
+    # ------------------------------------------------------------------ #
+    # Drag and drop de arquivos
+    #
+    # Interceptamos o drop no nível GTK porque o DnD nativo do WebKitGTK entrega
+    # à página um evento confiável, porém com dataTransfer.files VAZIO (o arquivo
+    # vem só como text/uri-list) — inútil para o WhatsApp. Aqui obtemos os
+    # arquivos de verdade e os colamos na conversa como um "paste" sintético
+    # (ver webview.attach_files_to_page). Fase CAPTURE para receber o drop antes
+    # do WebView; só reivindicamos Gdk.FileList, então arrastos de texto/links
+    # continuam indo para a página normalmente.
+
+    def _setup_drop_target(self) -> None:
+        drop = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)
+        drop.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        drop.connect("enter", self._on_drop_enter)
+        drop.connect("leave", self._on_drop_leave)
+        drop.connect("drop", self._on_drop)
+        self.add_controller(drop)
+
+    def _on_drop_enter(self, target: Gtk.DropTarget, x: float, y: float) -> Gdk.DragAction:
+        if self._stack.get_visible_child_name() == "web":
+            self._drop_hint.set_reveal_child(True)
+        return Gdk.DragAction.COPY
+
+    def _on_drop_leave(self, target: Gtk.DropTarget) -> None:
+        self._drop_hint.set_reveal_child(False)
+
+    def _on_drop(self, target: Gtk.DropTarget, value: Gdk.FileList, x: float, y: float) -> bool:
+        self._drop_hint.set_reveal_child(False)
+        files = value.get_files()
+        if not files:
+            return False
+        logging.info("Drop recebido com %d arquivo(s); anexando à conversa.", len(files))
+        self.web.attach_files_to_page(files, self._on_files_attached)
+        return True
+
+    def _on_files_attached(self, count: int) -> None:
+        if count == 1:
+            self.show_toast("Arquivo anexado — revise e clique em enviar")
+        elif count > 1:
+            self.show_toast(f"{count} arquivos anexados — revise e clique em enviar")
+        elif count == ATTACH_NO_CHAT:
+            self.show_toast("Abra uma conversa para anexar o arquivo")
+        elif count == ATTACH_TOO_BIG:
+            self.show_toast("Arquivo grande demais para arrastar — use o botão + do WhatsApp")
+        elif count == ATTACH_BUSY:
+            self.show_toast("Conclua o anexo em aberto antes de arrastar outro arquivo")
+        else:
+            self.show_toast("Não foi possível anexar — use o botão + do WhatsApp")
+
+    def _build_drop_hint(self) -> Gtk.Widget:
+        box = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=16,
+            halign=Gtk.Align.CENTER,
+            valign=Gtk.Align.CENTER,
+        )
+        icon = Gtk.Image.new_from_icon_name("document-send-symbolic")
+        icon.set_pixel_size(72)
+        label = Gtk.Label(label="Solte para anexar na conversa aberta")
+        label.add_css_class("title-2")
+        box.append(icon)
+        box.append(label)
+        box.add_css_class("drop-hint")
+
+        # can_target=False: o overlay é só decorativo; o drop segue para o WebView.
+        self._drop_hint = Gtk.Revealer(
+            child=box,
+            transition_type=Gtk.RevealerTransitionType.CROSSFADE,
+            can_target=False,
+        )
+        return self._drop_hint
 
     # ------------------------------------------------------------------ #
     # Páginas auxiliares
@@ -216,4 +358,13 @@ class WhatsAppWindow(Gtk.ApplicationWindow):
 
     def _on_close_request(self, window: Gtk.Window) -> bool:
         self._save_state()
+        application = self.get_application()
+        if application is not None and getattr(application, "background_mode", False):
+            # A janela é só ocultada (não destruída): o WebView segue vivo e
+            # as notificações continuam chegando. Reabrir o app pela launcher
+            # ou clicar numa notificação apresenta a mesma janela.
+            logging.info("Janela fechada; continuando em segundo plano.")
+            self.set_visible(False)
+            application.notify_background_running()
+            return True
         return False

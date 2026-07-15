@@ -4,10 +4,12 @@ Camada WebKit: sessão isolada, políticas de navegação, permissões e resili�
 Todo o estado web (cookies, localStorage, IndexedDB, cache) vive no diretório
 de dados da aplicação — nada se mistura com os navegadores do sistema.
 """
+import base64
+import json
 import logging
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Callable, List, Optional
 
 import gi
 
@@ -15,11 +17,32 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("WebKit", "6.0")
 from gi.repository import Gio, GLib, Gtk, WebKit
 
-from .constants import DEFAULT_USER_AGENT, INJECTED_STYLES, WHATSAPP_URL
+from .constants import (
+    ATTACH_CONFIRM_JS,
+    ATTACH_PASTE_JS,
+    INJECTED_STYLES,
+    SPOOF_SCRIPT,
+    WHATSAPP_URL,
+)
 
 # Janela de tempo para considerar crashes do WebProcess como "em sequência".
 _CRASH_WINDOW_SECONDS = 60
 _MAX_CRASHES_IN_WINDOW = 3
+
+# Limite do conteúdo total por drop: os bytes viajam como base64 dentro do
+# script injetado; acima disso o custo de memória fica abusivo e o botão de
+# anexo do próprio WhatsApp (que lê direto do disco) é o caminho certo.
+_ATTACH_MAX_BYTES = 64 * 1024 * 1024
+
+# Quanto tempo esperar o preview de anexo abrir após o paste sintético.
+_ATTACH_CONFIRM_TRIES = 12
+_ATTACH_CONFIRM_INTERVAL_MS = 400
+
+# Códigos de resultado de attach_files_to_page (além de count > 0 = sucesso).
+ATTACH_FAILED = 0
+ATTACH_NO_CHAT = -1
+ATTACH_TOO_BIG = -2
+ATTACH_BUSY = -3
 
 
 def _is_ignorable_load_error(error: GLib.Error) -> bool:
@@ -40,14 +63,16 @@ class WhatsAppWebView:
     def __init__(
         self,
         base_path: Path,
-        config: Dict[str, Any],
+        user_agent: str,
+        chrome_major: int,
         on_load_committed: Callable[[], None],
         on_load_failed: Callable[[str], None],
         on_title_changed: Callable[[Optional[str]], None],
         on_notification: Callable[[str, str], None],
     ) -> None:
         self._base_path = base_path
-        self._config = config
+        self._user_agent = user_agent
+        self._chrome_major = chrome_major
         self._on_load_committed = on_load_committed
         self._on_load_failed = on_load_failed
         self._on_title_changed = on_title_changed
@@ -77,7 +102,7 @@ class WhatsAppWebView:
         return session
 
     def _create_view(self) -> WebKit.WebView:
-        content_manager = WebKit.UserContentManager()
+        self._content_manager = WebKit.UserContentManager()
         style = WebKit.UserStyleSheet.new(
             INJECTED_STYLES,
             WebKit.UserContentInjectedFrames.TOP_FRAME,
@@ -85,11 +110,12 @@ class WhatsAppWebView:
             None,
             None,
         )
-        content_manager.add_style_sheet(style)
+        self._content_manager.add_style_sheet(style)
+        self._register_spoof_script()
 
         view = WebKit.WebView(
             network_session=self.network_session,
-            user_content_manager=content_manager,
+            user_content_manager=self._content_manager,
         )
         view.set_vexpand(True)
         view.set_hexpand(True)
@@ -99,13 +125,33 @@ class WhatsAppWebView:
         self._connect_signals(view)
         return view
 
+    def _register_spoof_script(self) -> None:
+        """Registra o script anti-detecção de Safari, executado antes da página."""
+        source = (
+            SPOOF_SCRIPT
+            .replace("__CHROME_MAJOR__", str(self._chrome_major))
+            .replace("__USER_AGENT__", self._user_agent)
+        )
+        script = WebKit.UserScript.new(
+            source,
+            WebKit.UserContentInjectedFrames.ALL_FRAMES,
+            WebKit.UserScriptInjectionTime.START,
+            None,
+            None,
+        )
+        self._content_manager.add_script(script)
+
     def _apply_settings(self, settings: WebKit.Settings) -> None:
-        user_agent = self._config.get("user_agent") or DEFAULT_USER_AGENT
-        settings.set_user_agent(user_agent)
-        logging.info("User-Agent definido: %s", user_agent)
+        settings.set_user_agent(self._user_agent)
+        logging.info("User-Agent definido: %s", self._user_agent)
 
         settings.set_enable_developer_extras(False)
         settings.set_enable_page_cache(True)
+
+        # Os "site-specific quirks" fazem o WebKit se apresentar ao JavaScript
+        # (navigator.userAgent/appVersion) como Safari de Mac em certos sites,
+        # por baixo do nosso UA customizado — exatamente o que queremos evitar.
+        settings.set_enable_site_specific_quirks(False)
         settings.set_hardware_acceleration_policy(WebKit.HardwareAccelerationPolicy.ALWAYS)
 
         # Necessário para mensagens de voz (microfone) e chamadas.
@@ -123,6 +169,13 @@ class WhatsAppWebView:
             pass
 
     def _connect_signals(self, view: WebKit.WebView) -> None:
+        # Pré-concede a permissão de notificações: o WebKit não a persiste
+        # entre sessões e, sem isso, Notification.permission fica "default"
+        # e o WhatsApp exibe o banner "notificações desativadas" a cada início.
+        view.get_context().connect(
+            "initialize-notification-permissions",
+            self._handle_init_notification_permissions,
+        )
         view.connect("load-changed", self._handle_load_changed)
         view.connect("load-failed", self._handle_load_failed)
         view.connect("decide-policy", self._handle_decide_policy)
@@ -146,6 +199,136 @@ class WhatsAppWebView:
 
     def get_zoom(self) -> float:
         return self.view.get_zoom_level()
+
+    def apply_user_agent(self, user_agent: str, chrome_major: int) -> None:
+        """Atualiza UA e script de spoof em execução (pleno efeito no próximo load)."""
+        self._user_agent = user_agent
+        self._chrome_major = chrome_major
+        self.view.get_settings().set_user_agent(user_agent)
+        self._content_manager.remove_all_scripts()
+        self._register_spoof_script()
+        logging.info("User-Agent atualizado em execução: %s", user_agent)
+
+    def attach_files_to_page(
+        self, files: List[Gio.File], on_done: Optional[Callable[[int], None]] = None
+    ) -> None:
+        """Anexa arquivos arrastados colando-os na conversa aberta.
+
+        O conteúdo de cada arquivo vai à página como base64 e é entregue ao
+        campo de mensagem num evento "paste" sintético com objetos File reais
+        (ver ATTACH_PASTE_JS) — o mesmo caminho de colar um arquivo do
+        clipboard. O WhatsApp abre o preview de anexo roteando cada tipo
+        (imagem vira mídia, PDF vira documento) e nada é enviado sem o usuário
+        clicar em enviar. on_done recebe o nº de arquivos ou um código
+        ATTACH_* negativo/zero em caso de falha.
+        """
+        def report(code: int) -> None:
+            if on_done is not None:
+                on_done(code)
+
+        # O tamanho é conferido via stat() ANTES de ler qualquer byte: um
+        # arquivo gigante jamais pode chegar à RAM (5 GB lidos aqui já
+        # derrubaram o sistema via OOM killer).
+        paths: list[Path] = []
+        total = 0
+        for gfile in files:
+            raw = gfile.get_path()
+            if not raw:
+                continue
+            path = Path(raw)
+            try:
+                total += path.stat().st_size
+            except OSError as error:
+                logging.warning("Ignorando arquivo ilegível no drop: %s (%s)", raw, error)
+                continue
+            if total > _ATTACH_MAX_BYTES:
+                logging.info(
+                    "Drop excede o limite de %d MiB por arrasto.",
+                    _ATTACH_MAX_BYTES // (1024 * 1024),
+                )
+                report(ATTACH_TOO_BIG)
+                return
+            paths.append(path)
+
+        payload = []
+        for path in paths:
+            try:
+                # Relê o tamanho junto do conteúdo: se o arquivo cresceu entre
+                # o stat() e a leitura, ainda respeitamos o limite.
+                with path.open("rb") as fh:
+                    data = fh.read(_ATTACH_MAX_BYTES + 1)
+            except OSError as error:
+                logging.warning("Ignorando arquivo ilegível no drop: %s (%s)", path, error)
+                continue
+            if len(data) > _ATTACH_MAX_BYTES:
+                report(ATTACH_TOO_BIG)
+                return
+            payload.append({
+                "name": path.name,
+                "type": self._guess_mime(str(path)),
+                "data": base64.b64encode(data).decode("ascii"),
+            })
+        if not payload:
+            report(ATTACH_FAILED)
+            return
+
+        js = ATTACH_PASTE_JS.replace("__FILES__", json.dumps(payload))
+        self.view.evaluate_javascript(
+            js, -1, None, None, None,
+            lambda view, result: self._on_attach_pasted(view, result, len(payload), report),
+        )
+
+    @staticmethod
+    def _guess_mime(path: str) -> str:
+        content_type, _ = Gio.content_type_guess(path, None)
+        return Gio.content_type_get_mime_type(content_type) or "application/octet-stream"
+
+    def _on_attach_pasted(self, view, result, count: int, report: Callable[[int], None]) -> None:
+        try:
+            value = view.evaluate_javascript_finish(result)
+            status = value.to_string() if value is not None else ""
+        except GLib.Error as error:
+            logging.warning("Falha no paste sintético do anexo: %s", error.message)
+            report(ATTACH_FAILED)
+            return
+        if status == "no-chat":
+            logging.info("Drop sem conversa aberta; nada a anexar.")
+            report(ATTACH_NO_CHAT)
+        elif status == "busy":
+            logging.info("Drop com preview de anexo já aberto; ignorado.")
+            report(ATTACH_BUSY)
+        elif status == "pasted":
+            GLib.timeout_add(
+                _ATTACH_CONFIRM_INTERVAL_MS,
+                self._confirm_attach, count, report, _ATTACH_CONFIRM_TRIES,
+            )
+        else:
+            logging.warning("Paste sintético retornou estado inesperado: %r", status)
+            report(ATTACH_FAILED)
+
+    def _confirm_attach(self, count: int, report: Callable[[int], None], tries: int) -> bool:
+        """Espera o preview de anexo abrir para só então reportar sucesso."""
+        def check(view, result):
+            opened = False
+            try:
+                value = view.evaluate_javascript_finish(result)
+                opened = value is not None and value.to_string() == "1"
+            except GLib.Error as error:
+                logging.warning("Falha ao verificar o preview de anexo: %s", error.message)
+            if opened:
+                logging.info("Anexo confirmado: preview aberto com %d arquivo(s).", count)
+                report(count)
+            elif tries <= 1:
+                logging.info("Preview de anexo não abriu após o paste sintético.")
+                report(ATTACH_FAILED)
+            else:
+                GLib.timeout_add(
+                    _ATTACH_CONFIRM_INTERVAL_MS,
+                    self._confirm_attach, count, report, tries - 1,
+                )
+
+        self.view.evaluate_javascript(ATTACH_CONFIRM_JS, -1, None, None, None, check)
+        return GLib.SOURCE_REMOVE
 
     # ------------------------------------------------------------------ #
     # Sinais
@@ -210,6 +393,11 @@ class WhatsAppWebView:
             Gio.AppInfo.launch_default_for_uri(uri, None)
         except GLib.Error as error:
             logging.warning("Falha ao abrir link externo: %s", error.message)
+
+    def _handle_init_notification_permissions(self, context: WebKit.WebContext) -> None:
+        origin = WebKit.SecurityOrigin.new_for_uri(WHATSAPP_URL)
+        context.initialize_notification_permissions([origin], [])
+        logging.info("Permissão de notificações pré-concedida para %s", WHATSAPP_URL)
 
     def _handle_permission_request(
         self, view: WebKit.WebView, request: WebKit.PermissionRequest

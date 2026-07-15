@@ -33,11 +33,13 @@ Fiz um **wrapper** em **Python** — linguagem com a qual tenho familiaridade �
 - 🔒 **Isolamento de Dados:** Sessão, cookies e cache isolados (sem misturar com seu Chrome/Firefox).
 - 🔔 **Notificações Nativas:** Integração direta com o sistema via Gio/D-Bus — sem dependências extras; clicar na notificação traz a janela de volta.
 - 📥 **Gerenciador de Downloads:** Salve PDFs, imagens e documentos onde quiser, com atalho "Abrir pasta" na notificação de conclusão.
+- 📎 **Arrastar e Soltar:** Arraste arquivos do gerenciador para a janela (com uma conversa aberta) para anexá-los — uma sobreposição indica a área de soltura.
 - 🌗 **Modo Escuro Automático:** Segue a preferência do desktop em tempo real (portal XDG — GNOME, KDE e outros).
 - ⚡ **Aceleração de Hardware:** Renderização via GPU.
 - 🔁 **Recuperação Automática:** Reconexão automática em falha de rede e recarregamento em caso de queda do processo de renderização.
 - 🪟 **Instância Única:** Abrir o app novamente apenas apresenta a janela existente (via D-Bus, sem file locks).
-- 🔍 **Zoom e Atalhos:** `Ctrl` `+`/`-`/`0` para zoom (persistente), `F5`/`Ctrl+R` recarrega, `F11` tela cheia, `Ctrl+Q` sai.
+- 🕶️ **Segundo Plano:** Fechar a janela mantém o app rodando e as notificações chegando; reabra pelo launcher ou clicando numa notificação. Alterne com `Ctrl+B`.
+- 🔍 **Zoom e Atalhos:** `Ctrl` `+`/`-`/`0` para zoom (persistente), `F5`/`Ctrl+R` recarrega, `F11` tela cheia, `Ctrl+B` alterna segundo plano, `Ctrl+Q` sai.
 
 ## Pré-requisitos
 Para instalar o wrapper, você precisa do Git, Python 3 e das bibliotecas do sistema do GTK 4 e do WebKitGTK 6.0.
@@ -95,16 +97,38 @@ python3 run.py
 
 ## Configuração Avançada
 
-### User Agent Personalizado
-Se o WhatsApp exibir aviso de "navegador não suportado", você pode alterar o User Agent manualmente.
-Edite o arquivo criado automaticamente em: `~/.local/share/python-whatsapp-gtk/config.json`.
+### User Agent Automático
+O aplicativo se apresenta como um Chrome atual no Linux e **descobre a versão do Chrome automaticamente** pela API oficial VersionHistory do Google — uma requisição leve e sem cookies, feita no máximo uma vez por semana, com cache local e fallback offline. Você nunca mais precisa atualizar o User-Agent na mão.
 
-Exemplo de `config.json`:
+Configurações antigas com User-Agent fixo padrão são migradas automaticamente para o modo `"auto"`.
+
+Se ainda assim quiser fixar um User-Agent (o que também **desativa** a consulta de rede), edite `~/.local/share/python-whatsapp-gtk/config.json`:
+
 ```json
 {
-    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
 }
 ```
+
+### Anti-detecção de "Safari"
+O WhatsApp Web detecta o motor WebKit por JavaScript e por isso exibia avisos como *"Baixe o WhatsApp para Mac"* mesmo com User-Agent de Chrome. Os vetores de detecção eram vários: `navigator.vendor`, ausência de `navigator.userAgentData`, os *site-specific quirks* do WebKitGTK (que reportam `navigator.appVersion` como Safari de Mac por baixo do UA customizado) e o renderizador WebGL exposto como `"Apple GPU"`. O aplicativo desativa os quirks e injeta, antes de qualquer script da página, uma camada de compatibilidade que se apresenta como Chromium no Linux em todos esses pontos — eliminando o problema na raiz, sem depender de seletores CSS que quebram a cada mudança de layout da Meta.
+
+### Arrastar e soltar arquivos
+Arraste arquivos do seu gerenciador de arquivos para a janela para anexá-los à **conversa aberta** — uma sobreposição "Solte para anexar" aparece enquanto você arrasta. O anexo abre no preview normal do WhatsApp (nada é enviado sem você clicar em enviar), e cada tipo é roteado pelo fluxo correto: imagens e vídeos como mídia, PDFs e outros arquivos como documento — inclusive em drops mistos com vários arquivos de uma vez.
+
+Nos bastidores: o drag and drop nativo do WebKitGTK entrega o drop à página, mas com `dataTransfer.files` vazio (o arquivo chega apenas como `text/uri-list`), então o WhatsApp não recebe o arquivo por esse caminho. Acionar o menu de anexo com cliques sintéticos também se mostrou não confiável. A solução: o app intercepta o drop no nível da janela (GTK), lê os arquivos do disco e os entrega ao campo de mensagem como um **evento `paste` sintético com objetos `File` reais** — o mesmo caminho de colar um arquivo do clipboard, que o WhatsApp já trata nativamente. O sucesso é confirmado observando o preview de anexo abrir; um aviso na tela informa o resultado (ex.: "Abra uma conversa para anexar").
+
+Limite: por esse caminho o conteúdo dos arquivos passa pela página em base64, então drops ficam limitados a **64 MiB por arrasto**; para arquivos maiores, use o botão **+** do próprio WhatsApp, que lê direto do disco.
+
+### Segundo plano
+Por padrão, fechar a janela **não encerra o aplicativo**: ele continua rodando sem janela, com o WhatsApp Web ativo e as notificações nativas chegando normalmente. Para trazer a janela de volta, clique numa notificação ou abra o app de novo pelo menu (instância única: a mesma janela reaparece). `Ctrl+Q` encerra de verdade.
+
+Para alternar o comportamento, use `Ctrl+B` (uma notificação confirma a mudança) ou edite `"background_mode": true/false` no `config.json`. A preferência é persistente.
+
+> **Nota:** as notificações nativas exibem o nome e o ícone do app corretamente apenas com o atalho instalado (`./install.sh`); rodando só com `python3 run.py` sem o `.desktop` instalado, elas aparecem com atribuição genérica.
+
+### Notificações sem banner recorrente
+O WebKitGTK não persiste a permissão de notificações entre sessões, então `Notification.permission` voltava a `"default"` a cada início e o WhatsApp exibia o banner *"As notificações de mensagens estão desativadas"* toda vez. O aplicativo pré-concede a permissão para `web.whatsapp.com` na inicialização do WebContext (`initialize-notification-permissions`), e as notificações são entregues como notificações nativas do GNOME.
 
 ---
 
